@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SYNGRID RAG Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #020617; color: #e5e7eb; }
+    .app { max-width: 900px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+    header { padding: 12px 0 8px; }
+    h1 { font-size: 1.5rem; margin: 0; display: flex; align-items: center; gap: 8px; }
+    h1 span.logo { width: 28px; height: 28px; border-radius: 999px; background: linear-gradient(135deg,#22c55e,#0ea5e9); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.9rem; }
+    .subtitle { font-size: 0.9rem; color: #9ca3af; margin-top: 4px; }
+    main { flex: 1; display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+    .status-bar { font-size: 0.85rem; color: #9ca3af; display:flex; align-items:center; gap:6px; }
+    .status-dot { width:8px;height:8px;border-radius:999px;background:#22c55e; }
+    .status-dot.off { background:#f97316; }
+    .card { border-radius: 14px; background: rgba(15,23,42,0.9); border: 1px solid rgba(148,163,184,0.2); padding: 12px; display:flex; flex-direction:column; gap:10px; }
+    .chat-window { flex: 1; min-height: 220px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
+    .msg { margin-bottom: 10px; display:flex; gap:8px; align-items:flex-start; }
+    .msg.user .bubble { margin-left:auto; background:#22c55e; color:#022c22; }
+    .msg.assistant .bubble { background:#020617; border:1px solid rgba(148,163,184,0.3); }
+    .bubble { padding: 8px 11px; border-radius: 14px; max-width: 80%; font-size: 0.9rem; white-space: pre-wrap; }
+    .msg-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 2px; }
+    .input-row { display:flex; gap:8px; margin-top: 4px; }
+    textarea { flex:1; resize:none; min-height:52px; max-height:120px; padding:8px 10px; border-radius:10px; border:1px solid rgba(148,163,184,0.4); background:#020617; color:#e5e7eb; font-family:inherit; font-size:0.9rem; }
+    textarea:focus { outline:none; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,0.3); }
+    button { border:none; border-radius:10px; padding:0 14px; font-size:0.9rem; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+    .btn-primary { background:#22c55e; color:#022c22; }
+    .btn-primary:disabled { opacity:0.6; cursor:default; }
+    .meta { display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; color:#9ca3af; }
+    .meta small { display:flex; align-items:center; gap:4px; }
+    .contact-card { margin-top: 10px; border-radius: 12px; background: rgba(15,23,42,0.9); border: 1px dashed rgba(251,191,36,0.6); padding: 10px; font-size: 0.85rem; }
+    .contact-card h3 { margin: 0 0 6px; font-size: 0.95rem; color: #fde68a; }
+    .contact-form { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+    .contact-form input { flex:1 1 140px; min-width:0; padding:6px 8px; border-radius:8px; border:1px solid rgba(148,163,184,0.4); background:#020617; color:#e5e7eb; font-size:0.85rem; }
+    .contact-form input:focus { outline:none; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,0.3); }
+    .contact-actions { display:flex; justify-content:flex-end; margin-top:6px; gap:8px; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:999px; border:1px solid rgba(148,163,184,0.4); }
+    .badge span.dot { width:6px;height:6px;border-radius:999px;background:#22c55e; }
+    @media (max-width: 640px) { .app { padding:10px; } .bubble { max-width:100%; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1><span class="logo">SG</span> SYNGRID RAG Assistant</h1>
+      <div class="subtitle">Ask questions about syngrid.com and collect leads seamlessly.</div>
+    </header>
+
+    <main>
+      <div class="status-bar">
+        <span id="status-dot" class="status-dot off"></span>
+        <span id="status-text">Checking chatbot status...</span>
+      </div>
+
+      <section class="card">
+        <div class="chat-window" id="chat-window"></div>
+        <div class="input-row">
+          <textarea id="question-input" placeholder="Ask anything about Syngrid, our services, products, or company... (Shift+Enter for new line)"></textarea>
+          <button id="send-btn" class="btn-primary">Send</button>
+        </div>
+        <div class="meta">
+          <small><span class="badge"><span class="dot"></span><span id="rag-ready">RAG initializing...</span></span></small>
+          <small id="hint">Tip: After a few questions, you'll be asked for contact details.</small>
+        </div>
+      </section>
+
+      <section id="contact-section" class="contact-card" style="display:none;">
+        <h3>Continue the conversation</h3>
+        <div id="contact-message"></div>
+        <div class="contact-form">
+          <input id="name-input" type="text" placeholder="Your name" />
+          <input id="email-input" type="email" placeholder="Email" />
+          <input id="phone-input" type="tel" placeholder="Phone (optional)" />
+        </div>
+        <div class="contact-actions">
+          <button id="contact-submit" class="btn-primary">Submit details</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const apiBase = '';
+    const chatWindow = document.getElementById('chat-window');
+    const questionInput = document.getElementById('question-input');
+    const sendBtn = document.getElementById('send-btn');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const ragReadyEl = document.getElementById('rag-ready');
+    const contactSection = document.getElementById('contact-section');
+    const contactMessage = document.getElementById('contact-message');
+    const contactSubmit = document.getElementById('contact-submit');
+    const nameInput = document.getElementById('name-input');
+    const emailInput = document.getElementById('email-input');
+    const phoneInput = document.getElementById('phone-input');
+
+    let sessionId = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2));
+    let contactRequired = false;
+
+    function addMessage(role, text) {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg ' + role;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+
+      const label = document.createElement('div');
+      label.className = 'msg-label';
+      label.textContent = role === 'user' ? 'You' : 'Assistant';
+
+      const content = document.createElement('div');
+      content.textContent = text;
+
+      bubble.appendChild(label);
+      bubble.appendChild(content);
+      wrap.appendChild(bubble);
+      chatWindow.appendChild(wrap);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    async function checkStatus() {
+      try {
+        const res = await fetch(apiBase + '/status');
+        const data = await res.json();
+        const ready = data.ready;
+        ragReadyEl.textContent = ready ? 'RAG ready' : 'RAG initializing...';
+        statusDot.classList.toggle('off', !ready);
+        statusText.textContent = ready ? 'Chatbot is ready.' : 'Preparing knowledge base... you can already ask questions.';
+      } catch (e) {
+        statusDot.classList.add('off');
+        statusText.textContent = 'Unable to reach backend. Is the server running on port 10000?';
+      }
+    }
+
+    async function sendQuestion() {
+      const question = questionInput.value.trim();
+      if (!question) return;
+
+      addMessage('user', question);
+      questionInput.value = '';
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending...';
+
+      try {
+        const res = await fetch(apiBase + '/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, session_id: sessionId })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+          addMessage('assistant', 'Error: ' + (err.detail || res.statusText));
+        } else {
+          const data = await res.json();
+          addMessage('assistant', data.answer || '(No answer returned)');
+
+          if (data.requires_contact) {
+            contactRequired = true;
+            contactSection.style.display = 'block';
+            contactMessage.textContent = data.contact_message || 'Please share your contact details to continue.';
+          }
+        }
+      } catch (e) {
+        addMessage('assistant', 'Network error talking to backend. Make sure the FastAPI server is running on http://localhost:10000.');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+        questionInput.focus();
+      }
+    }
+
+    async function submitContact() {
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
+      const phone = phoneInput.value.trim();
+
+      if (!name || !email) {
+        alert('Name and email are required.');
+        return;
+      }
+
+      contactSubmit.disabled = true;
+      contactSubmit.textContent = 'Saving...';
+
+      try {
+        const res = await fetch(apiBase + '/submit-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            name,
+            email,
+            phone
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert('Failed to save contact: ' + (data.detail || res.statusText));
+        } else {
+          contactSection.style.display = 'none';
+          contactRequired = false;
+          addMessage('assistant', data.message || 'Your contact information has been saved.');
+        }
+      } catch (e) {
+        alert('Network error saving contact info.');
+      } finally {
+        contactSubmit.disabled = false;
+        contactSubmit.textContent = 'Submit details';
+      }
+    }
+
+    // Event bindings
+    sendBtn.addEventListener('click', sendQuestion);
+    questionInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuestion();
+      }
+    });
+    contactSubmit.addEventListener('click', submitContact);
+
+    // Initial messages and status
+    addMessage('assistant', 'Hi! I\'m the SYNGRID RAG assistant. Ask me anything about Syngrid\'s services, products, or company.');
+    checkStatus();
+    setInterval(checkStatus, 15000);
+  </script>
+</body>
+</html>
