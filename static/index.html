@@ -83,7 +83,9 @@
   </div>
 
   <script>
-    const apiBase = '';
+    const apiBase = (window.location.hostname === 'hirthick6.github.io')
+      ? 'https://YOUR-BACKEND-DOMAIN-HERE'
+      : 'http://localhost:10000';
     const chatWindow = document.getElementById('chat-window');
     const questionInput = document.getElementById('question-input');
     const sendBtn = document.getElementById('send-btn');
